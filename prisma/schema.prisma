@@ -1,0 +1,213 @@
+// =============================================================================
+// Missing Link — Database Schema
+// =============================================================================
+// Supports: User profiles, cycling data, matches (dating + ride/BFF),
+// chat, sport integrations, ride planning
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"       // Switch to "postgresql" for production
+  url      = env("DATABASE_URL")
+}
+
+// --- AUTH -------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  name          String
+  age           Int?
+  city          String?
+  bio           String?
+  gender        String?
+  genderPref    String?
+  photoUrl      String?
+  
+  // App modes: "dating", "ride", or both
+  modes         String    @default("ride")  // comma-separated: "dating,ride"
+  
+  // Cycling profile
+  disciplines     String?   // comma-separated: "road,gravel,mtb"
+  experience      String?   // Beginner | Gevorderd | Ervaren | Expert | Pro
+  preferredDistance String?  // e.g. "50-80 km"
+  preferredDays   String?   // comma-separated: "Ma,Wo,Za,Zo"
+  ridePref        String?   // comma-separated: "Solo,Duo,Groep"
+  goals           String?   // comma-separated: "Liefde,Fietsmaatjes"
+  
+  // Location (approximate for privacy)
+  latitude      Float?
+  longitude     Float?
+  region        String?
+  
+  // Privacy settings
+  showDatingMode  Boolean @default(true)
+  showRideMode    Boolean @default(true)
+  showExactCity   Boolean @default(false)
+  
+  // Onboarding
+  onboardingComplete Boolean @default(false)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  sportProfiles   SportProfile[]
+  sentLikes       Like[]       @relation("sentLikes")
+  receivedLikes   Like[]       @relation("receivedLikes")
+  matchesAsA      Match[]      @relation("matchUserA")
+  matchesAsB      Match[]      @relation("matchUserB")
+  sentMessages    Message[]
+  ridePlans       RidePlan[]   @relation("ridePlanCreator")
+  rideInvites     RidePlan[]   @relation("ridePlanInvitee")
+  sessions        Session[]
+  accounts        Account[]
+}
+
+// --- SPORT INTEGRATIONS -----------------------------------------------------
+
+model SportProfile {
+  id              String  @id @default(cuid())
+  userId          String
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Which platform
+  provider        String  // "strava" | "garmin" | "wahoo" | "manual"
+  providerUserId  String?
+  accessToken     String?
+  refreshToken    String?
+  tokenExpiresAt  DateTime?
+  
+  // Aggregated stats (updated via sync)
+  avgSpeed        Float?
+  avgDistance      Float?
+  avgDuration     Float?  // minutes
+  avgElevation    Float?  // meters
+  weeklyRides     Float?
+  totalDistance    Float?  // km
+  totalRides      Int?
+  
+  // Raw recent activities (JSON string)
+  recentActivities String? // JSON array
+  
+  // Derived discipline from activities
+  derivedDisciplines String? // comma-separated
+  
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([userId, provider])
+}
+
+// --- MATCHING ---------------------------------------------------------------
+
+model Like {
+  id        String   @id @default(cuid())
+  fromId    String
+  from      User     @relation("sentLikes", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String
+  to        User     @relation("receivedLikes", fields: [toId], references: [id], onDelete: Cascade)
+  mode      String   // "dating" | "ride"
+  createdAt DateTime @default(now())
+  
+  @@unique([fromId, toId, mode])
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  userAId   String
+  userA     User     @relation("matchUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId   String
+  userB     User     @relation("matchUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  mode      String   // "dating" | "ride"
+  score     Float?   // match score
+  createdAt DateTime @default(now())
+  
+  messages  Message[]
+  ridePlans RidePlan[]
+  
+  @@unique([userAId, userBId, mode])
+}
+
+// --- CHAT -------------------------------------------------------------------
+
+model Message {
+  id        String   @id @default(cuid())
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content   String
+  type      String   @default("text") // "text" | "ride_plan" | "image"
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// --- RIDE PLANNING ----------------------------------------------------------
+
+model RidePlan {
+  id          String   @id @default(cuid())
+  matchId     String
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  creatorId   String
+  creator     User     @relation("ridePlanCreator", fields: [creatorId], references: [id])
+  inviteeId   String
+  invitee     User     @relation("ridePlanInvitee", fields: [inviteeId], references: [id])
+  
+  date        String?
+  time        String?
+  startLocation String?
+  startLat    Float?
+  startLng    Float?
+  routeUrl    String?  // link to Komoot/Strava route
+  distance    Float?
+  notes       String?
+  
+  status      String   @default("pending") // pending | accepted | declined | completed
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// --- NEXTAUTH ---------------------------------------------------------------
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  
+  @@unique([identifier, token])
+}
