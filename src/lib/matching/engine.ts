@@ -97,10 +97,10 @@ export function calculateMatchScore(
 }
 
 /** Apply discovery filters to a set of candidates */
-export function applyFilters(
-  candidates: MatchCandidate[],
+export function applyFilters<T extends { modes: string[]; disciplines: string[]; distance: number; avgSpeed?: number | null }>(
+  candidates: T[],
   filters: DiscoverFilters
-): MatchCandidate[] {
+): T[] {
   let result = candidates.filter((c) => c.modes.includes(filters.mode));
 
   if (filters.discipline) {
