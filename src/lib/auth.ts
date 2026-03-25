@@ -10,7 +10,7 @@ import { prisma } from "@/lib/db";
 // =============================================================================
 
 const SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || "dev-secret-change-in-production-obviously"
+  process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || "dev-secret-change-in-production-obviously"
 );
 
 const COOKIE_NAME = "ml-session";
