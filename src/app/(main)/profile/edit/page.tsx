@@ -138,22 +138,46 @@ export default function EditProfilePage() {
     setUploading(true);
     setUploadError(null);
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) {
-        setUploadError(data.error || "Upload mislukt");
+      // Stap 1: haal een signed upload URL op van de server
+      const signedRes = await fetch("/api/upload/signed-url", { method: "POST" });
+      const signedData = await signedRes.json();
+      if (!signedRes.ok) {
+        setUploadError(signedData.error || "Upload mislukt");
+        setUploading(false);
+        return;
+      }
+
+      // Stap 2: upload het bestand direct naar Supabase (omzeilt Netlify)
+      const uploadRes = await fetch(signedData.signedUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type || "image/jpeg" },
+      });
+
+      if (!uploadRes.ok) {
+        setUploadError("Upload naar storage mislukt");
+        setUploading(false);
+        return;
+      }
+
+      // Stap 3: sla de publieke URL op in het profiel
+      const patchRes = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrl: signedData.publicUrl }),
+      });
+
+      if (!patchRes.ok) {
+        setUploadError("Foto opslaan mislukt");
       } else {
-        setPhotoUrl(data.photoUrl);
+        setPhotoUrl(signedData.publicUrl);
       }
     } catch {
       setUploadError("Upload mislukt, probeer opnieuw");
     }
+
     setUploading(false);
-    // Reset input so the same file can be selected again
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
