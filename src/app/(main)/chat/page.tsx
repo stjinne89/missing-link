@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Avatar } from "@/components/ui/avatar";
+import { supabase } from "@/lib/supabase";
 import type { ChatMessage } from "@/types";
 
 function ChatContent() {
@@ -12,12 +13,13 @@ function ChatContent() {
   const partnerName = searchParams.get("name") || "Chat";
   const partnerId = searchParams.get("partnerId");
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<(ChatMessage & { ridePlanId?: string | null })[]>([]);
   const [input, setInput] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [showRidePlan, setShowRidePlan] = useState(false);
   const [ridePlan, setRidePlan] = useState({ date: "", time: "", location: "", notes: "" });
   const [sending, setSending] = useState(false);
+  const [respondingTo, setRespondingTo] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,16 +53,48 @@ function ChatContent() {
 
     load();
 
-    // Poll for new messages every 3 seconds
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/chat?matchId=${matchId}`);
-        const data = await res.json();
-        setMessages(data.messages || []);
-      } catch {}
-    }, 3000);
+    // Supabase Realtime — luister naar nieuwe berichten in deze match
+    const channel = supabase
+      .channel(`chat:${matchId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "Message",
+          filter: `matchId=eq.${matchId}`,
+        },
+        (payload) => {
+          const newMsg = payload.new as {
+            id: string;
+            senderId: string;
+            content: string;
+            type: string;
+            read: boolean;
+            createdAt: string;
+          };
+          setMessages((prev) => {
+            // Voorkom duplicaten (eigen berichten worden al lokaal toegevoegd)
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [
+              ...prev,
+              {
+                id: newMsg.id,
+                senderId: newMsg.senderId,
+                content: newMsg.content,
+                type: newMsg.type as ChatMessage["type"],
+                read: newMsg.read,
+                createdAt: newMsg.createdAt,
+              },
+            ];
+          });
+        }
+      )
+      .subscribe();
 
-    return () => clearInterval(interval);
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [matchId, router]);
 
   const sendMessage = async (content: string, type = "text") => {
@@ -82,11 +116,46 @@ function ChatContent() {
     setSending(false);
   };
 
-  const sendRidePlan = () => {
-    const plan = `🗓️ Ritvoorstel\n📅 ${ridePlan.date || "Nog te bepalen"}\n⏰ ${ridePlan.time || "Ochtend"}\n📍 ${ridePlan.location || "Nader te bepalen"}\n💬 ${ridePlan.notes || "Zin in!"}`;
-    sendMessage(plan, "ride_plan");
+  const sendRidePlan = async () => {
+    if (!matchId || sending) return;
+    setSending(true);
+
+    const content = `🗓️ Ritvoorstel\n📅 ${ridePlan.date || "Nog te bepalen"}\n⏰ ${ridePlan.time || "Ochtend"}\n📍 ${ridePlan.location || "Nader te bepalen"}\n💬 ${ridePlan.notes || "Zin in!"}`;
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matchId,
+          content,
+          type: "ride_plan",
+          ridePlan: { ...ridePlan },
+        }),
+      });
+      const msg = await res.json();
+      setMessages((prev) => [...prev, msg]);
+    } catch (err) {
+      console.error("Send ride plan error:", err);
+    }
+
+    setSending(false);
     setShowRidePlan(false);
     setRidePlan({ date: "", time: "", location: "", notes: "" });
+  };
+
+  const respondToRidePlan = async (ridePlanId: string, status: "accepted" | "declined") => {
+    setRespondingTo(ridePlanId);
+    try {
+      await fetch("/api/ride-plans", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ridePlanId, status }),
+      });
+    } catch (err) {
+      console.error("Respond error:", err);
+    }
+    setRespondingTo(null);
   };
 
   if (!matchId) {
@@ -180,22 +249,54 @@ function ChatContent() {
           const isMe = msg.senderId === userId;
           const isRidePlan = msg.type === "ride_plan";
 
+          if (isRidePlan) {
+            return (
+              <div key={msg.id} className="flex justify-center">
+                <div
+                  className="w-full max-w-[85%] rounded-3xl p-4 whitespace-pre-line"
+                  style={{
+                    background: "#E0F8EA",
+                    border: "1.5px solid rgba(46,204,113,0.3)",
+                    color: "#1B1B1B",
+                  }}
+                >
+                  <p className="text-sm font-medium">{msg.content}</p>
+                  <p className="text-xs mt-1 opacity-50">
+                    {new Date(msg.createdAt).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                  {/* Accept/decline knoppen alleen voor de ontvanger */}
+                  {!isMe && msg.ridePlanId && (
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        disabled={respondingTo === msg.ridePlanId}
+                        onClick={() => respondToRidePlan(msg.ridePlanId!, "accepted")}
+                        className="flex-1 py-2 rounded-2xl text-sm font-bold text-white transition-all active:scale-95"
+                        style={{ background: "#2ECC71" }}
+                      >
+                        ✓ Accepteren
+                      </button>
+                      <button
+                        disabled={respondingTo === msg.ridePlanId}
+                        onClick={() => respondToRidePlan(msg.ridePlanId!, "declined")}
+                        className="flex-1 py-2 rounded-2xl text-sm font-bold transition-all active:scale-95"
+                        style={{ background: "#FF6B6B15", color: "#FF6B6B", border: "1px solid #FF6B6B30" }}
+                      >
+                        ✗ Afwijzen
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
               <div
-                className={`max-w-[80%] rounded-3xl px-4 py-2.5 ${isRidePlan ? "whitespace-pre-line" : ""}`}
+                className="max-w-[80%] rounded-3xl px-4 py-2.5"
                 style={{
-                  background: isMe
-                    ? isRidePlan
-                      ? "#E0F8EA"
-                      : "#FFC629"
-                    : "#F7F7F7",
-                  color: isMe
-                    ? isRidePlan
-                      ? "#27AE60"
-                      : "#1B1B1B"
-                    : "#1B1B1B",
-                  border: isRidePlan ? "1px solid rgba(46,204,113,0.25)" : "none",
+                  background: isMe ? "#FFC629" : "#F7F7F7",
+                  color: "#1B1B1B",
                 }}
               >
                 <p className="text-sm">{msg.content}</p>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
 const SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || "dev-secret-change-in-production-obviously"
+  process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || "dev-secret-change-in-production-obviously"
 );
 
 export async function middleware(req: NextRequest) {
@@ -42,5 +42,6 @@ export const config = {
     "/api/matches/:path*",
     "/api/chat/:path*",
     "/api/integrations/:path*",
+    "/integrations/:path*",
   ],
 };

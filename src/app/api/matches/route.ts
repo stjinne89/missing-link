@@ -23,6 +23,13 @@ export async function GET() {
         orderBy: { createdAt: "desc" },
         take: 1,
       },
+      _count: {
+        select: {
+          messages: {
+            where: { senderId: { not: userId }, read: false },
+          },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -42,7 +49,7 @@ export async function GET() {
       score: m.score,
       lastMessage: lastMsg?.content ?? null,
       lastMessageAt: lastMsg?.createdAt?.toISOString() ?? null,
-      unreadCount: 0, // TODO: count unread messages
+      unreadCount: m._count.messages,
       createdAt: m.createdAt.toISOString(),
     };
   });

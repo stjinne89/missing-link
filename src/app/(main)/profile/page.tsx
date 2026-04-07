@@ -137,7 +137,7 @@ export default function ProfilePage() {
       <div className="rounded-2xl overflow-hidden mb-5 bg-white card-shadow">
         {[
           { icon: "✏️", label: "Profiel bewerken", action: () => router.push("/profile/edit") },
-          { icon: "🔗", label: "Gekoppelde accounts", action: () => {} },
+          { icon: "🔗", label: "Gekoppelde accounts", action: () => router.push("/integrations") },
           { icon: "🔒", label: "Privacy", action: () => {} },
           { icon: "🔔", label: "Notificaties", action: () => {} },
           { icon: "❓", label: "Help & support", action: () => {} },

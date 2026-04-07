@@ -34,9 +34,13 @@ interface ProfileForm {
 export default function EditProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<ProfileForm | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function load() {
@@ -47,6 +51,7 @@ export default function EditProfilePage() {
           return;
         }
         const data = await res.json();
+        setPhotoUrl(data.photoUrl || null);
         setProfile({
           name: data.name || "",
           age: data.age?.toString() || "",
@@ -69,6 +74,88 @@ export default function EditProfilePage() {
     }
     load();
   }, [router]);
+
+  const handleLocationUpdate = async () => {
+    if (!navigator.geolocation) {
+      alert("Geolocatie wordt niet ondersteund door je browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+
+        // Reverse geocode via OpenStreetMap Nominatim (gratis, geen API key nodig)
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+            { headers: { "Accept-Language": "nl" } }
+          );
+          const data = await res.json();
+          const city =
+            data.address?.city ||
+            data.address?.town ||
+            data.address?.village ||
+            data.address?.municipality ||
+            "";
+          const region =
+            data.address?.state || data.address?.province || "";
+
+          // Update profile state
+          setProfile((p) => p ? { ...p, city: city || p.city } : p);
+
+          // Save to DB directly
+          await fetch("/api/users/me", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ latitude, longitude, region, city: city || undefined }),
+          });
+        } catch {
+          // Still save coordinates even if reverse geocode fails
+          await fetch("/api/users/me", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ latitude, longitude }),
+          });
+        }
+
+        alert("Locatie bijgewerkt!");
+      },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          alert("Locatietoegang geweigerd. Sta locatietoegang toe in je browserinstellingen.");
+        } else {
+          alert("Kon locatie niet ophalen, probeer opnieuw.");
+        }
+      },
+      { timeout: 10000, maximumAge: 300000 }
+    );
+  };
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadError(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        setUploadError(data.error || "Upload mislukt");
+      } else {
+        setPhotoUrl(data.photoUrl);
+      }
+    } catch {
+      setUploadError("Upload mislukt, probeer opnieuw");
+    }
+    setUploading(false);
+    // Reset input so the same file can be selected again
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const toggle = (field: keyof ProfileForm, val: string) => {
     setProfile((p) => {
@@ -145,14 +232,40 @@ export default function EditProfilePage() {
       </div>
 
       <div className="px-5 space-y-6 mt-2">
-        {/* Avatar placeholder */}
-        <div className="flex justify-center">
-          <div className="relative">
-            <Avatar name={profile.name || "U"} size={90} />
-            <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-sm text-secondary font-bold card-shadow">
-              +
+        {/* Foto upload */}
+        <div className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="relative group"
+          >
+            <Avatar name={profile.name || "U"} photoUrl={photoUrl} size={90} />
+            <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity">
+              <span className="text-white text-xs font-bold">
+                {uploading ? "..." : "Wijzig"}
+              </span>
             </div>
-          </div>
+            <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-sm text-white font-bold card-shadow">
+              {uploading ? "⟳" : "+"}
+            </div>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={handlePhotoSelect}
+          />
+          {uploadError && (
+            <p className="text-xs text-red-500">{uploadError}</p>
+          )}
+          {uploading && (
+            <p className="text-xs text-text-secondary">Foto uploaden...</p>
+          )}
+          {!uploading && !uploadError && (
+            <p className="text-xs text-text-secondary">Tik op je foto om te wijzigen</p>
+          )}
         </div>
 
         {/* --- SECTION: Basisinfo --- */}
@@ -175,6 +288,14 @@ export default function EditProfilePage() {
               onChange={(e) => update("city", e.target.value)}
             />
           </div>
+          <button
+            type="button"
+            onClick={handleLocationUpdate}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all active:scale-[0.98]"
+            style={{ background: "var(--color-bg-elevated)", border: "2px solid var(--color-border)", color: "var(--color-text)" }}
+          >
+            📍 Locatie automatisch bijwerken
+          </button>
           <div>
             <label className="text-sm font-bold text-text-secondary mb-1.5 block">Bio</label>
             <textarea

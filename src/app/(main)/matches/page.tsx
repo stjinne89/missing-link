@@ -105,11 +105,20 @@ export default function MatchesPage() {
                   </p>
                 )}
               </div>
-              <div className="text-right shrink-0">
+              <div className="text-right shrink-0 flex flex-col items-end gap-1">
                 {m.score && (
                   <div className="text-sm font-bold text-success">{Math.round(m.score)}%</div>
                 )}
-                <div className="text-xs text-text-muted">Chat →</div>
+                {m.unreadCount > 0 ? (
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                    style={{ background: "#FF6B6B" }}
+                  >
+                    {m.unreadCount > 9 ? "9+" : m.unreadCount}
+                  </div>
+                ) : (
+                  <div className="text-xs text-text-muted">→</div>
+                )}
               </div>
             </button>
           ))}

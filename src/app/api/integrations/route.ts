@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // Mock: directly fetch profile data (real flow would use OAuth callback)
-    const tokens = await adapter.handleCallback("mock_code");
+    const tokens = await adapter.handleCallback("mock_code", "");
     const sportData = await adapter.fetchProfile(tokens.accessToken);
 
     // Upsert sport profile

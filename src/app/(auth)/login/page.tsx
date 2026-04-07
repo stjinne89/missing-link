@@ -93,32 +93,11 @@ export default function LoginPage() {
           {loading ? "Bezig..." : "Inloggen"}
         </Button>
 
-        {/* Strava login placeholder */}
-        <button
-          type="button"
-          className="w-full py-3.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-95"
-          style={{
-            background: "#FC4C0215",
-            color: "#FC4C02",
-            border: "1.5px solid #FC4C0230",
-          }}
-          onClick={() => {
-            // TODO: Strava OAuth login
-            alert("Strava login komt in de volgende iteratie!");
-          }}
-        >
-          🟠 Inloggen met Strava
-        </button>
-
         <p className="text-center text-sm text-text-muted mt-6">
           Nog geen account?{" "}
           <Link href="/register" className="text-primary-dark font-bold hover:underline">
             Registreren
           </Link>
-        </p>
-
-        <p className="text-center text-xs text-text-muted mt-4">
-          Demo: demo@missinglink.nl / test1234
         </p>
       </form>
     </div>

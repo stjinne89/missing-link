@@ -60,14 +60,14 @@ export async function GET(req: NextRequest) {
   });
 }
 
-/** POST /api/chat — send a message */
+/** POST /api/chat — send a message (optionally with ride plan data) */
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.id) {
     return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
   }
 
-  const { matchId, content, type = "text" } = await req.json();
+  const { matchId, content, type = "text", ridePlan } = await req.json();
 
   if (!matchId || !content) {
     return NextResponse.json(
@@ -91,6 +91,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Match niet gevonden" }, { status: 404 });
   }
 
+  // Determine the other user (invitee)
+  const inviteeId = match.userAId === session.id ? match.userBId : match.userAId;
+
   const message = await prisma.message.create({
     data: {
       matchId,
@@ -100,6 +103,24 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // If this is a ride plan message, also persist a RidePlan record
+  let ridePlanId: string | null = null;
+  if (type === "ride_plan" && ridePlan) {
+    const plan = await prisma.ridePlan.create({
+      data: {
+        matchId,
+        creatorId: session.id,
+        inviteeId,
+        date: ridePlan.date || null,
+        time: ridePlan.time || null,
+        startLocation: ridePlan.location || null,
+        notes: ridePlan.notes || null,
+        status: "pending",
+      },
+    });
+    ridePlanId = plan.id;
+  }
+
   return NextResponse.json({
     id: message.id,
     senderId: message.senderId,
@@ -107,5 +128,6 @@ export async function POST(req: NextRequest) {
     type: message.type,
     read: message.read,
     createdAt: message.createdAt.toISOString(),
+    ridePlanId,
   });
 }
