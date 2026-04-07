@@ -64,7 +64,15 @@ class StravaAdapter implements IntegrationAdapter {
 
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(`Strava token exchange mislukt: ${err.message || res.status}`);
+      // Log volledig voor debugging
+      console.error("Strava token exchange fout:", JSON.stringify({
+        status: res.status,
+        error: err,
+        clientId: process.env.STRAVA_CLIENT_ID,
+        redirectUri,
+        codeLength: code?.length,
+      }));
+      throw new Error(`Strava token exchange mislukt: ${err.message || res.status} — errors: ${JSON.stringify(err.errors)}`);
     }
 
     const data = await res.json();

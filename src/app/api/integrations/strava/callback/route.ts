@@ -73,6 +73,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/integrations?success=strava`);
   } catch (err) {
     console.error("Strava callback error:", err);
+    // Stuur volledige foutmelding mee zodat we kunnen debuggen
     const msg = err instanceof Error ? err.message : "Koppeling mislukt";
     return NextResponse.redirect(
       `${baseUrl}/integrations?error=${encodeURIComponent(msg)}`
