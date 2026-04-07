@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { supabase, AVATARS_BUCKET, getAvatarUrl } from "@/lib/supabase";
+import { AVATARS_BUCKET, getAvatarUrl } from "@/lib/supabase";
+
+// Service role client — bypasses RLS, server-side only
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -41,8 +48,8 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage
+    // Upload to Supabase Storage (service role bypasses RLS)
+    const { error: uploadError } = await supabaseAdmin.storage
       .from(AVATARS_BUCKET)
       .upload(path, buffer, {
         contentType: file.type,
