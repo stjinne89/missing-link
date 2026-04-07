@@ -19,7 +19,7 @@ export default function HomePage() {
 
       <div className="text-center relative z-10 animate-slide-up">
         <div className="mb-4">
-          <Logo size="xl" showText />
+          <Logo size="xl" />
         </div>
 
         <p className="text-sm text-text-muted mb-8 max-w-xs mx-auto leading-relaxed">

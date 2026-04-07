@@ -47,15 +47,9 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex flex-col justify-center px-6 py-12 bg-white">
       <div className="text-center mb-10 animate-slide-up">
-        <div className="flex justify-center mb-2">
-          <Logo size="lg" />
+        <div className="flex justify-center mb-4">
+          <Logo size="xl" />
         </div>
-        <h1
-          className="text-3xl tracking-tight"
-          style={{ fontFamily: "'Libre Baskerville', serif", fontWeight: 700 }}
-        >
-          Missing<span className="text-primary-dark">Link</span>
-        </h1>
         <p className="text-sm text-text-muted mt-1">Maak een account aan</p>
       </div>
 
